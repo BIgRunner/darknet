@@ -27,6 +27,7 @@
 #include "parser.h"
 #include "region_layer.h"
 #include "yolo_layer.h"
+#include "finder_layer.h"
 #include "iseg_layer.h"
 #include "reorg_layer.h"
 #include "rnn_layer.h"
@@ -53,6 +54,7 @@ LAYER_TYPE string_to_layer_type(char * type)
     if (strcmp(type, "[detection]")==0) return DETECTION;
     if (strcmp(type, "[region]")==0) return REGION;
     if (strcmp(type, "[yolo]")==0) return YOLO;
+    if (strcmp(type, "[finder]")==0) return FINDER;
     if (strcmp(type, "[iseg]")==0) return ISEG;
     if (strcmp(type, "[local]")==0) return LOCAL;
     if (strcmp(type, "[conv]")==0
@@ -312,6 +314,45 @@ layer parse_yolo(list *options, size_params params)
     char *a = option_find_str(options, "mask", 0);
     int *mask = parse_yolo_mask(a, &num);
     layer l = make_yolo_layer(params.batch, params.w, params.h, num, total, mask, classes);
+    assert(l.outputs == params.inputs);
+
+    l.max_boxes = option_find_int_quiet(options, "max",90);
+    l.jitter = option_find_float(options, "jitter", .2);
+
+    l.ignore_thresh = option_find_float(options, "ignore_thresh", .5);
+    l.truth_thresh = option_find_float(options, "truth_thresh", 1);
+    l.random = option_find_int_quiet(options, "random", 0);
+
+    char *map_file = option_find_str(options, "map", 0);
+    if (map_file) l.map = read_map(map_file);
+
+    a = option_find_str(options, "anchors", 0);
+    if(a){
+        int len = strlen(a);
+        int n = 1;
+        int i;
+        for(i = 0; i < len; ++i){
+            if (a[i] == ',') ++n;
+        }
+        for(i = 0; i < n; ++i){
+            float bias = atof(a);
+            l.biases[i] = bias;
+            a = strchr(a, ',')+1;
+        }
+    }
+    return l;
+}
+
+layer parse_finder(list *options, size_params params)
+{
+    // int classes = option_find_int(options, "classes", 20);
+    int total = option_find_int(options, "num", 1);
+    int num = total;
+
+    char *a = option_find_str(options, "mask", 0);
+    int *mask = parse_yolo_mask(a, &num);
+    // layer l = make_yolo_layer(params.batch, params.w, params.h, num, total, mask, classes);
+    layer l = make_finder_layer(params.batch, params.w, params.h, num, total, mask);
     assert(l.outputs == params.inputs);
 
     l.max_boxes = option_find_int_quiet(options, "max",90);
@@ -803,6 +844,8 @@ network *parse_network_cfg(char *filename)
             l = parse_region(options, params);
         }else if(lt == YOLO){
             l = parse_yolo(options, params);
+        }else if(lt == FINDER){
+            l = parse_finder(options, params);
         }else if(lt == ISEG){
             l = parse_iseg(options, params);
         }else if(lt == DETECTION){

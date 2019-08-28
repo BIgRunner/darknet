@@ -34,13 +34,21 @@ void letterbox_image_into(image im, int w, int h, image boxed);
 image resize_max(image im, int max);
 void translate_image(image m, float s);
 void embed_image(image source, image dest, int dx, int dy);
+// 20190103
+void embed_rgbd_image(image color_source, image depth_source, image dest, int dx, int dy);
 void place_image(image im, int w, int h, int dx, int dy, image canvas);
+// 20181229
+void place_rgbd_image(image color, image depth, int w, int h, int dx, int dy, image canvas);
 void saturate_image(image im, float sat);
 void exposure_image(image im, float sat);
 void distort_image(image im, float hue, float sat, float val);
+void distort_rgbd(image rgbd, float hue, float sat, float val);
 void saturate_exposure_image(image im, float sat, float exposure);
 void rgb_to_hsv(image im);
 void hsv_to_rgb(image im);
+// 20190313
+void rgbd_to_hsv(image im);
+void hsv_to_rgbd(image im);
 void yuv_to_rgb(image im);
 void rgb_to_yuv(image im);
 

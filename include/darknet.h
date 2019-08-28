@@ -82,6 +82,7 @@ typedef enum {
     XNOR,
     REGION,
     YOLO,
+    FINDER,
     ISEG,
     REORG,
     UPSAMPLE,
@@ -525,6 +526,11 @@ typedef struct detection{
     int sort_class;
 } detection;
 
+typedef struct finder{
+    box bbox;
+    float objectness;
+} finder;
+
 typedef struct matrix{
     int rows, cols;
     float **vals;
@@ -541,7 +547,7 @@ typedef struct{
 } data;
 
 typedef enum {
-    CLASSIFICATION_DATA, DETECTION_DATA, CAPTCHA_DATA, REGION_DATA, IMAGE_DATA, COMPARE_DATA, WRITING_DATA, SWAG_DATA, TAG_DATA, OLD_CLASSIFICATION_DATA, STUDY_DATA, DET_DATA, SUPER_DATA, LETTERBOX_DATA, REGRESSION_DATA, SEGMENTATION_DATA, INSTANCE_DATA, ISEG_DATA
+    CLASSIFICATION_DATA, DETECTION_DATA, RGBDFINDER_DATA, CAPTCHA_DATA, REGION_DATA, IMAGE_DATA, COMPARE_DATA, WRITING_DATA, SWAG_DATA, TAG_DATA, OLD_CLASSIFICATION_DATA, STUDY_DATA, DET_DATA, SUPER_DATA, LETTERBOX_DATA, LETTERBOX_RGBD_DATA, REGRESSION_DATA, SEGMENTATION_DATA, INSTANCE_DATA, ISEG_DATA
 } data_type;
 
 typedef struct load_args{
@@ -688,15 +694,21 @@ void load_weights_upto(network *net, char *filename, int start, int cutoff);
 void zero_objectness(layer l);
 void get_region_detections(layer l, int w, int h, int netw, int neth, float thresh, int *map, float tree_thresh, int relative, detection *dets);
 int get_yolo_detections(layer l, int w, int h, int netw, int neth, float thresh, int *map, int relative, detection *dets);
+int get_finder_detections(layer l, int w, int h, int netw, int neth, float thresh, int *map, int relative, detection *dets);
 void free_network(network *net);
 void set_batch_network(network *net, int b);
 void set_temp_network(network *net, float t);
 image load_image(char *filename, int w, int h, int c);
 image load_image_color(char *filename, int w, int h);
+image load_image_depth(char *filename, int w, int h);
+// 20190313
+void get_depth_path(char *rgb_path, char* depth_path);
 image make_image(int w, int h, int c);
 image resize_image(image im, int w, int h);
 void censor_image(image im, int dx, int dy, int w, int h);
 image letterbox_image(image im, int w, int h);
+// 20190103
+image letterbox_rgbd_image(image color, image depth, int w, int h);
 image crop_image(image im, int dx, int dy, int w, int h);
 image center_crop_image(image im, int w, int h);
 image resize_min(image im, int min);
@@ -722,6 +734,7 @@ image float_to_image(int w, int h, int c, float *data);
 void ghost_image(image source, image dest, int dx, int dy);
 float network_accuracy(network *net, data d);
 void random_distort_image(image im, float hue, float saturation, float exposure);
+void random_distort_rgbd(image im, float hue, float saturation, float exposure);
 void fill_image(image m, float s);
 image grayscale_image(image im);
 void rotate_image_cw(image im, int times);
@@ -733,6 +746,7 @@ data load_all_cifar10();
 box_label *read_boxes(char *filename, int *n);
 box float_to_box(float *f, int stride);
 void draw_detections(image im, detection *dets, int num, float thresh, char **names, image **alphabet, int classes);
+void draw_finders(image im, detection *dets, int num, float thresh, image **alphabet);
 
 matrix network_predict_data(network *net, data test);
 image **load_alphabet();

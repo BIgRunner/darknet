@@ -309,6 +309,122 @@ void draw_detections(image im, detection *dets, int num, float thresh, char **na
     }
 }
 
+void draw_finders(image im, detection *dets, int num, float thresh, image **alphabet)
+{
+    // int i,j;
+
+    for(int i = 0; i < num; ++i){
+        // char labelstr[4096] = {0};
+        // int class = -1;
+        if(dets[i].objectness<=thresh) continue;
+
+        int width = im.h * .006;
+
+        // strcat(labelstr, "objectness: ");
+
+
+        int offset = 2;
+        float red = get_color(2, offset, 15);
+        float green = get_color(1, offset, 15);
+        float blue = get_color(0, offset, 15);
+        // float rgb[3];
+
+        box b = dets[i].bbox;
+
+        int left   = (b.x-b.w/2.)*im.w;
+        int right  = (b.x+b.w/2.)*im.w;
+        int top    = (b.y-b.h/2.)*im.h;
+        int bot    = (b.y+b.h/2.)*im.h;
+
+        if(left < 0) left = 0;
+        if(right > im.w-1) right = im.w-1;
+        if(top < 0) top = 0;
+        if(bot > im.h-1) bot = im.h-1;
+
+        draw_box_width(im, left, top, right, bot, width, red, green, blue);
+
+        // if (alphabet) {
+        //     image label = get_label(alphabet, labelstr, im.h*.03);
+        //     draw_label(im, top+width, left, label, rgb);
+        //     free_image(label);
+        // }
+
+        if (dets[i].mask){
+            image mask = float_to_image(14, 14, 1, dets[i].mask);
+            image resized_mask = resize_image(mask, b.w*im.w, b.h*im.h);
+            image tmask = threshold_image(resized_mask, .5);
+            embed_image(tmask, im, left, top);
+            free_image(mask);
+            free_image(resized_mask);
+            free_image(tmask);
+        }
+
+        // for(j = 0; j < classes; ++j){
+        //     if (dets[i].prob[j] > thresh){
+        //         if (class < 0) {
+        //             strcat(labelstr, names[j]);
+        //             class = j;
+        //         } else {
+        //             strcat(labelstr, ", ");
+        //             strcat(labelstr, names[j]);
+        //         }
+        //         printf("%s: %.0f%%\n", names[j], dets[i].prob[j]*100);
+        //     }
+        // }
+        // if(class >= 0){
+        //     int width = im.h * .006;
+
+        //     /*
+        //        if(0){
+        //        width = pow(prob, 1./2.)*10+1;
+        //        alphabet = 0;
+        //        }
+        //      */
+
+        //     //printf("%d %s: %.0f%%\n", i, names[class], prob*100);
+        //     int offset = class*123457 % classes;
+        //     float red = get_color(2,offset,classes);
+        //     float green = get_color(1,offset,classes);
+        //     float blue = get_color(0,offset,classes);
+        //     float rgb[3];
+
+        //     //width = prob*20+2;
+
+        //     rgb[0] = red;
+        //     rgb[1] = green;
+        //     rgb[2] = blue;
+        //     box b = dets[i].bbox;
+        //     //printf("%f %f %f %f\n", b.x, b.y, b.w, b.h);
+
+        //     int left  = (b.x-b.w/2.)*im.w;
+        //     int right = (b.x+b.w/2.)*im.w;
+        //     int top   = (b.y-b.h/2.)*im.h;
+        //     int bot   = (b.y+b.h/2.)*im.h;
+
+        //     if(left < 0) left = 0;
+        //     if(right > im.w-1) right = im.w-1;
+        //     if(top < 0) top = 0;
+        //     if(bot > im.h-1) bot = im.h-1;
+
+        //     draw_box_width(im, left, top, right, bot, width, red, green, blue);
+        //     if (alphabet) {
+        //         image label = get_label(alphabet, labelstr, (im.h*.03));
+        //         draw_label(im, top + width, left, label, rgb);
+        //         free_image(label);
+        //     }
+        //     if (dets[i].mask){
+        //         image mask = float_to_image(14, 14, 1, dets[i].mask);
+        //         image resized_mask = resize_image(mask, b.w*im.w, b.h*im.h);
+        //         image tmask = threshold_image(resized_mask, .5);
+        //         embed_image(tmask, im, left, top);
+        //         free_image(mask);
+        //         free_image(resized_mask);
+        //         free_image(tmask);
+        //     }
+        // }
+    }
+}
+
 void transpose_image(image im)
 {
     assert(im.w == im.h);
@@ -433,6 +549,33 @@ void embed_image(image source, image dest, int dx, int dy)
             for(x = 0; x < source.w; ++x){
                 float val = get_pixel(source, x,y,k);
                 set_pixel(dest, dx+x, dy+y, k, val);
+            }
+        }
+    }
+}
+
+void embed_rgbd_image(image color_source, image depth_source, image dest, int dx, int dy)
+{
+    int x, y, k;
+    for(k = 0; k < color_source.c; ++k)
+    {
+        for(y = 0; y < color_source.h; ++y)
+        {
+            for(x = 0; x < color_source.w; ++x)
+            {
+                float val = get_pixel(color_source, x, y, k);
+                set_pixel(dest, dx+x, dy+y, k, val);
+            }
+        }
+    }
+    for(k = 0; k < depth_source.c; ++k)
+    {
+        for(y = 0; y < depth_source.h; ++y)
+        {
+            for(x = 0; x < depth_source.w; ++x)
+            {
+                float val = get_pixel(depth_source, x, y, k);
+                set_pixel(dest, dx+x, dy+y, k+color_source.c, val);
             }
         }
     }
@@ -645,6 +788,34 @@ void place_image(image im, int w, int h, int dx, int dy, image canvas)
     }
 }
 
+void place_rgbd_image(image color, image depth, int w, int h, int dx, int dy, image canvas)
+{
+    int x, y, c;
+    // place color image
+    for(c = 0; c < color.c; ++c){
+        for(y = 0; y < h; ++y){
+            for(x = 0; x < w; ++x){
+                float rx = ((float)x / w) * color.w;
+                float ry = ((float)y / h) * color.h;
+                float val = bilinear_interpolate(color, rx, ry, c);
+                set_pixel(canvas, x + dx, y + dy, c, val);
+            }
+        }
+    }
+    // place depth image
+    for(c = 0; c < depth.c; ++c){
+        for(y = 0; y < h; ++y){
+            for(x = 0; x < w; ++x){
+                float rx = ((float)x / w) * depth.w;
+                float ry = ((float)y / h) * depth.h;
+                float val = bilinear_interpolate(depth, rx, ry, c);
+                // float val = get_pixel_extend(depth, rx, ry, c); 
+                set_pixel(canvas, x + dx, y + dy, c+color.c, val);
+            }
+        }
+    }
+}
+
 image center_crop_image(image im, int w, int h)
 {
     int m = (im.w < im.h) ? im.w : im.h;   
@@ -830,6 +1001,30 @@ image letterbox_image(image im, int w, int h)
     return boxed;
 }
 
+image letterbox_rgbd_image(image color, image depth, int w, int h)
+{
+    int new_w = color.w;
+    int new_h = color.h;
+    if (((float)w/color.w) < ((float)h/color.h))
+    {
+        new_w = w;
+        new_h = (color.h * w)/color.w;
+    }
+    else
+    {
+        new_h = h;
+        new_w = (color.w * h)/color.h;
+    }
+    image resized_color = resize_image(color, new_w, new_h);
+    image resized_depth = resize_image(depth, new_w, new_h);
+    image boxed = make_image(w, h, color.c + depth.c);
+    fill_image(boxed, .5);
+    embed_rgbd_image(resized_color, resized_depth, boxed, (w-new_w)/2, (h-new_h)/2);
+    free_image(resized_color);
+    free_image(resized_depth);
+    return boxed;
+}
+
 image resize_max(image im, int max)
 {
     int w = im.w;
@@ -998,9 +1193,89 @@ void rgb_to_hsv(image im)
     }
 }
 
+// 20190313
+void rgbd_to_hsv(image im)
+{
+    assert(im.c == 6);
+    int i, j;
+    float r, g, b;
+    float h, s, v;
+    for(j = 0; j < im.h; ++j){
+        for(i = 0; i < im.w; ++i){
+            r = get_pixel(im, i , j, 0);
+            g = get_pixel(im, i , j, 1);
+            b = get_pixel(im, i , j, 2);
+            float max = three_way_max(r,g,b);
+            float min = three_way_min(r,g,b);
+            float delta = max - min;
+            v = max;
+            if(max == 0){
+                s = 0;
+                h = 0;
+            }else{
+                s = delta/max;
+                if(r == max){
+                    h = (g - b) / delta;
+                } else if (g == max) {
+                    h = 2 + (b - r) / delta;
+                } else {
+                    h = 4 + (r - g) / delta;
+                }
+                if (h < 0) h += 6;
+                h = h/6.;
+            }
+            set_pixel(im, i, j, 0, h);
+            set_pixel(im, i, j, 1, s);
+            set_pixel(im, i, j, 2, v);
+        }
+    }
+}
+
 void hsv_to_rgb(image im)
 {
     assert(im.c == 3);
+    int i, j;
+    float r, g, b;
+    float h, s, v;
+    float f, p, q, t;
+    for(j = 0; j < im.h; ++j){
+        for(i = 0; i < im.w; ++i){
+            h = 6 * get_pixel(im, i , j, 0);
+            s = get_pixel(im, i , j, 1);
+            v = get_pixel(im, i , j, 2);
+            if (s == 0) {
+                r = g = b = v;
+            } else {
+                int index = floor(h);
+                f = h - index;
+                p = v*(1-s);
+                q = v*(1-s*f);
+                t = v*(1-s*(1-f));
+                if(index == 0){
+                    r = v; g = t; b = p;
+                } else if(index == 1){
+                    r = q; g = v; b = p;
+                } else if(index == 2){
+                    r = p; g = v; b = t;
+                } else if(index == 3){
+                    r = p; g = q; b = v;
+                } else if(index == 4){
+                    r = t; g = p; b = v;
+                } else {
+                    r = v; g = p; b = q;
+                }
+            }
+            set_pixel(im, i, j, 0, r);
+            set_pixel(im, i, j, 1, g);
+            set_pixel(im, i, j, 2, b);
+        }
+    }
+}
+
+// 20190313
+void hsv_to_rgbd(image im)
+{
+    assert(im.c == 6);
     int i, j;
     float r, g, b;
     float h, s, v;
@@ -1179,12 +1454,37 @@ void distort_image(image im, float hue, float sat, float val)
     constrain_image(im);
 }
 
+//20190313
+void distort_rgbd(image rgbd, float hue, float sat, float val)
+{
+    rgbd_to_hsv(rgbd);
+    scale_image_channel(rgbd, 1, sat);
+    scale_image_channel(rgbd, 2, val);
+    int i;
+    for (i = 0; i < rgbd.w*rgbd.h; ++i){
+        rgbd.data[i] = rgbd.data[i] + hue;
+        if (rgbd.data[i] > 1) rgbd.data[i] = 1;
+        if (rgbd.data[i] < 0) rgbd.data[i] = 0;
+    }
+    hsv_to_rgbd(rgbd);
+    constrain_image(rgbd);
+}
+
 void random_distort_image(image im, float hue, float saturation, float exposure)
 {
     float dhue = rand_uniform(-hue, hue);
     float dsat = rand_scale(saturation);
     float dexp = rand_scale(exposure);
     distort_image(im, dhue, dsat, dexp);
+}
+
+// 20190313
+void random_distort_rgbd(image im, float hue, float saturation, float exposure)
+{
+    float dhue = rand_uniform(-hue, hue);
+    float dsat = rand_scale(saturation);
+    float dexp = rand_scale(exposure);
+    distort_rgbd(im, dhue, dsat, dexp);
 }
 
 void saturate_exposure_image(image im, float sat, float exposure)
@@ -1331,6 +1631,11 @@ image load_image(char *filename, int w, int h, int c)
 }
 
 image load_image_color(char *filename, int w, int h)
+{
+    return load_image(filename, w, h, 3);
+}
+
+image load_image_depth(char *filename, int w, int h)
 {
     return load_image(filename, w, h, 3);
 }

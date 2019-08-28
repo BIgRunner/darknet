@@ -37,6 +37,8 @@ double demo_time;
 
 detection *get_network_boxes(network *net, int w, int h, float thresh, float hier, int *map, int relative, int *num);
 
+finder *get_finder_boxes(network *net, int w, int h, float thresh, float hier, int *map, int relative, int *num);
+
 int size_network(network *net)
 {
     int i;

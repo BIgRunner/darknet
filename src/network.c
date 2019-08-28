@@ -18,6 +18,7 @@
 #include "detection_layer.h"
 #include "region_layer.h"
 #include "yolo_layer.h"
+#include "finder_layer.h"
 #include "normalization_layer.h"
 #include "batchnorm_layer.h"
 #include "maxpool_layer.h"
@@ -381,6 +382,8 @@ int resize_network(network *net, int w, int h)
             resize_region_layer(&l, w, h);
         }else if(l.type == YOLO){
             resize_yolo_layer(&l, w, h);
+        }else if(l.type == FINDER){
+            resize_finder_layer(&l, w, h);
         }else if(l.type == ROUTE){
             resize_route_layer(&l, net);
         }else if(l.type == SHORTCUT){
@@ -396,6 +399,7 @@ int resize_network(network *net, int w, int h)
         }else if(l.type == COST){
             resize_cost_layer(&l, inputs);
         }else{
+            error("i");
             error("Cannot resize this type of layer");
         }
         if(l.workspace_size > workspace_size) workspace_size = l.workspace_size;
@@ -516,6 +520,9 @@ int num_detections(network *net, float thresh)
         if(l.type == YOLO){
             s += yolo_num_detections(l, thresh);
         }
+        if(l.type == FINDER){
+            s += finder_num_detections(l, thresh);
+        }
         if(l.type == DETECTION || l.type == REGION){
             s += l.w*l.h*l.n;
         }
@@ -546,6 +553,10 @@ void fill_network_boxes(network *net, int w, int h, float thresh, float hier, in
         layer l = net->layers[j];
         if(l.type == YOLO){
             int count = get_yolo_detections(l, w, h, net->w, net->h, thresh, map, relative, dets);
+            dets += count;
+        }
+        if(l.type == FINDER){
+            int count = get_finder_detections(l, w, h, net->w,net->h, thresh, map, relative, dets);
             dets += count;
         }
         if(l.type == REGION){

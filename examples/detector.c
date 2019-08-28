@@ -39,8 +39,12 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     float jitter = l.jitter;
 
     list *plist = get_paths(train_images);
+    // try to deal with depth images
+    // list *dlist = get_paths(train_depths);
     //int N = plist->size;
     char **paths = (char **)list_to_array(plist);
+    // try to deal with depth images 1231
+    // char **depth_paths = (char **)list_to_array(dlist);
 
     load_args args = get_base_args(net);
     args.coords = l.coords;

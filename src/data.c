@@ -53,6 +53,21 @@ char **get_random_paths(char **paths, int n, int m)
     return random_paths;
 }
 
+// char **get_random_rgbd_paths(char **paths, int n, int m)
+// {
+//     char **random_paths = calloc(2*n, sizeof(char*));
+//     int i;
+//     pthread_mutex_lock(&mutex);
+//     for(i = 0; i < n; ++i){
+//         int index = rand()%m;
+//         random_paths[2*i] = paths[2*index];
+//         random_paths[2*i+1] = paths[2*index+1];
+//         //if(i == 0) printf("%s\n", paths[index]);
+//     }
+//     pthread_mutex_unlock(&mutex);
+//     return random_paths;
+// }
+
 char **find_replace_paths(char **paths, int n, char *find, char *replace)
 {
     char **replace_paths = calloc(n, sizeof(char*));
@@ -166,6 +181,8 @@ box_label *read_boxes(char *filename, int *n)
     return boxes;
 }
 
+// 20190314 Note
+// reorder boxes
 void randomize_boxes(box_label *b, int n)
 {
     int i;
@@ -444,6 +461,15 @@ void fill_truth_mask(char *path, int num_boxes, float *truth, int classes, int w
 }
 
 
+// 20190313
+void get_depth_path(char *rgb_path, char *depth_path)
+{
+    find_replace(rgb_path, "images", "depths", depth_path);
+    find_replace(depth_path, "rgb", "depth", depth_path);
+    find_replace(depth_path, "color", "depth", depth_path);
+}
+
+
 void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, int flip, float dx, float dy, float sx, float sy)
 {
     char labelpath[4096];
@@ -485,6 +511,54 @@ void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, 
     }
     free(boxes);
 }
+
+// 20190313
+void fill_truth_finder(char *path, int num_boxes, float *truth, int flip, float dx, float dy, float sx, float sy)
+{
+    char labelpath[4096];
+    find_replace(path, "images", "labels", labelpath);
+    find_replace(labelpath, "JPEGImages", "labels", labelpath);
+
+    find_replace(labelpath, "depths", "labels", labelpath);
+    find_replace(labelpath, "depth", "color", labelpath);
+
+    find_replace(labelpath, "raw", "labels", labelpath);
+    find_replace(labelpath, ".jpg", ".txt", labelpath);
+    find_replace(labelpath, ".png", ".txt", labelpath);
+    find_replace(labelpath, ".JPG", ".txt", labelpath);
+    find_replace(labelpath, ".JPEG", ".txt", labelpath);
+    int count = 0;
+    box_label *boxes = read_boxes(labelpath, &count);
+    randomize_boxes(boxes, count);
+    correct_boxes(boxes, count, dx, dy, sx, sy, flip);
+    if(count > num_boxes) count = num_boxes;
+    float x,y,w,h;
+    int id;
+    int i;
+    int sub = 0;
+
+    for (i = 0; i < count; ++i) {
+        x =  boxes[i].x;
+        y =  boxes[i].y;
+        w =  boxes[i].w;
+        h =  boxes[i].h;
+        id = boxes[i].id;
+
+        // filter out tiny object in image
+        if ((w < .001 || h < .001)) {
+            ++sub;
+            continue;
+        }
+
+        truth[(i-sub)*5+0] = x;
+        truth[(i-sub)*5+1] = y;
+        truth[(i-sub)*5+2] = w;
+        truth[(i-sub)*5+3] = h;
+        truth[(i-sub)*5+4] = id;
+    }
+    free(boxes);
+}
+
 
 #define NUMCHARS 37
 
@@ -1087,6 +1161,91 @@ data load_data_detection(int n, char **paths, int m, int w, int h, int boxes, in
     return d;
 }
 
+
+// load rgbd image data in data
+data load_data_finder(int n, char **paths, int m, int w, int h, int boxes, int rgbd, float jitter, float hue, float saturation, float exposure)
+{
+    char **random_paths = get_random_paths(paths, n, m);
+    data d = {0};
+    d.shallow = 0;
+    d.X.rows = n;
+    d.X.vals = calloc(d.X.rows, sizeof(float*));
+    // to store depth image with rgb image 
+    // d.X.cols = h*w*3;
+    if (rgbd) { 
+        d.X.cols = h*w*6;
+    } else {
+        d.X.cols = h*w*3;
+    }
+    
+    d.y = make_matrix(n, 5*boxes);
+    // if(rgbd)
+    //    printf("rgbd");
+
+    for(int i = 0; i < n; ++i){
+        image color = load_image_color(random_paths[i], 0, 0);
+        image depth = {0};
+        int c;
+        if (rgbd) {
+            char depth_path[4096];
+            get_depth_path(random_paths[i], depth_path);
+            depth = load_image_depth(depth_path, 0, 0);
+            c = 6;
+        } else {
+            c = 3;
+        }
+        image sized = make_image(w, h, c);
+        fill_image(sized, .5);
+
+        float dw = jitter * color.w;
+        float dh = jitter * color.h;
+
+        float new_ar = (color.w + rand_uniform(-dw, dw)) / (color.h + rand_uniform(-dh, dh));
+        //float scale = rand_uniform(.25, 2);
+        float scale = 1;
+
+        float nw, nh;
+
+        if(new_ar < 1){
+            nh = scale * h;
+            nw = nh * new_ar;
+        } else {
+            nw = scale * w;
+            nh = nw / new_ar;
+        }
+
+        float dx = rand_uniform(0, w - nw);
+        float dy = rand_uniform(0, h - nh);
+
+        if (rgbd) { 
+            place_rgbd_image(color, depth, nw, nh, dx, dy, sized);
+            random_distort_rgbd(sized, hue, saturation, exposure);
+        } else {
+            place_image(color, nw, nh, dx, dy, sized);
+            random_distort_image(sized, hue, saturation, exposure);
+        }
+        // place_image(color, nw, nh, dx, dy, sized);
+        // random_distort_image(sized, hue, saturation, exposure);
+
+        // place_image(depth, nw, nh, dx, dy, sized_depth);
+
+
+        int flip = rand()%2;
+        if(flip) flip_image(sized);
+        d.X.vals[i] = sized.data;
+
+        fill_truth_finder(random_paths[i], boxes, d.y.vals[i], flip, -dx/w, -dy/h, nw/w, nh/h);
+
+        free_image(color);
+        if(rgbd)
+        {
+            free_image(depth);
+        }
+    }
+    free(random_paths);
+    return d;
+}
+
 void *load_thread(void *ptr)
 {
     //printf("Loading data: %d\n", rand());
@@ -1115,6 +1274,8 @@ void *load_thread(void *ptr)
         *a.d = load_data_region(a.n, a.paths, a.m, a.w, a.h, a.num_boxes, a.classes, a.jitter, a.hue, a.saturation, a.exposure);
     } else if (a.type == DETECTION_DATA){
         *a.d = load_data_detection(a.n, a.paths, a.m, a.w, a.h, a.num_boxes, a.classes, a.jitter, a.hue, a.saturation, a.exposure);
+    } else if (a.type == RGBDFINDER_DATA){
+        *a.d = load_data_finder(a.n, a.paths, a.m, a.w, a.h, a.num_boxes, a.classes, a.jitter, a.hue, a.saturation, a.exposure);
     } else if (a.type == SWAG_DATA){
         *a.d = load_data_swag(a.paths, a.n, a.classes, a.jitter);
     } else if (a.type == COMPARE_DATA){
@@ -1124,7 +1285,13 @@ void *load_thread(void *ptr)
         *(a.resized) = resize_image(*(a.im), a.w, a.h);
     } else if (a.type == LETTERBOX_DATA){
         *(a.im) = load_image_color(a.path, 0, 0);
-        *(a.resized) = letterbox_image(*(a.im), a.w, a.h);
+        *(a.resized) = letterbox_image(*(a.im), a.w, a.h); 
+    } else if (a.type == LETTERBOX_RGBD_DATA) {
+        *(a.im) = load_image_color(a.path, 0, 0);
+        char depth_path[4096];
+        get_depth_path(a.path, depth_path);
+        image depth = load_image_depth(depth_path, 0, 0);
+        *(a.resized) = letterbox_rgbd_image(*(a.im), depth, a.w, a.h);
     } else if (a.type == TAG_DATA){
         *a.d = load_data_tag(a.paths, a.n, a.m, a.classes, a.min, a.max, a.size, a.angle, a.aspect, a.hue, a.saturation, a.exposure);
     }
